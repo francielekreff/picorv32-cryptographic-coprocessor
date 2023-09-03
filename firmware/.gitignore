@@ -1,5 +1,5 @@
 .Xil/
-firmware.bin
-firmware.elf
-firmware.map
+*.bin
+*.elf
+*.map
 

@@ -1,10 +1,19 @@
-TOOLCHAIN_PREFIX = riscv32-unknown-elf-
+CROSS=riscv32-unknown-elf-
 
-all: firmware.S firmware.c firmware.lds
-	$(TOOLCHAIN_PREFIX)gcc -O0 -ffreestanding -nostdlib -o firmware.elf firmware.S firmware.c \
-		 --std=gnu99 -Wl,-Bstatic,-T,firmware.lds,-Map,firmware.map,--strip-debug -lgcc
-	$(TOOLCHAIN_PREFIX)objcopy -O binary firmware.elf firmware.bin
-	python3 ../scripts/makehex.py firmware.bin 4096 > firmware.hex
+firmware: main.elf
+	$(CROSS)objcopy -O binary main.elf main.bin
+	python3 progmem.py
+
+main.elf: main.lds start.s main.c
+	$(CROSS)gcc $(CFLAGS) -march=rv32im -mabi=ilp32 -Wl,--build-id=none,-Bstatic,-T,main.lds,-Map,main.map,--strip-debug -ffreestanding -nostdlib \
+	-o main.elf start.s main.c
+
+main.lds: sections.lds
+	$(CROSS)cpp -P -o $@ $^
 
 clean:
-	rm -f *.bin *.elf *.hex *.map
+	rm -f main.elf
+	rm -f main.lds
+	rm -f main.map
+	rm -f main.bin
+	rm -f progmem.v

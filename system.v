@@ -1,101 +1,99 @@
-`timescale 1 ns / 1 ps
+/*
+ *  PicoSoC - A simple SoC using PicoRV32
+ *
+ *  Copyright (C) 2017  Clifford Wolf <clifford@clifford.at>
+ *
+ *  Permission to use, copy, modify, and/or distribute this software for any
+ *  purpose with or without fee is hereby granted, provided that the above
+ *  copyright notice and this permission notice appear in all copies.
+ *
+ *  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ *  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ *  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ *  ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ *  WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ *  ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ *  OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ *
+ */
 
 module system (
-	input            clk,
-	input            resetn,
-	output           trap,
-	output reg [7:0] out_byte,
-	output reg       out_byte_en
+    input clk,
+
+    output tx,
+    input  rx,
+
+    input  [3:0] sw,
+    output [3:0] led
 );
-	// set this to 0 for better timing but less performance/MHz
-	parameter FAST_MEMORY = 1;
 
-	// 4096 32bit words = 16kB memory
-	parameter MEM_SIZE = 4096;
+    wire clk_bufg;
 
-	wire mem_valid;
-	wire mem_instr;
-	reg mem_ready;
-	wire [31:0] mem_addr;
-	wire [31:0] mem_wdata;
-	wire [3:0] mem_wstrb;
-	reg [31:0] mem_rdata;
+    bufg_opt bufg (
+        .dat_in(clk),
+        .dat_out(clk_bufg)
+    );
 
-	wire mem_la_read;
-	wire mem_la_write;
-	wire [31:0] mem_la_addr;
-	wire [31:0] mem_la_wdata;
-	wire [3:0] mem_la_wstrb;
+    reg [5:0] reset_cnt = 0;
+    wire resetn = &reset_cnt;
 
-	picorv32 picorv32_core (
-		.clk         (clk         ),
-		.resetn      (resetn      ),
-		.trap        (trap        ),
-		.mem_valid   (mem_valid   ),
-		.mem_instr   (mem_instr   ),
-		.mem_ready   (mem_ready   ),
-		.mem_addr    (mem_addr    ),
-		.mem_wdata   (mem_wdata   ),
-		.mem_wstrb   (mem_wstrb   ),
-		.mem_rdata   (mem_rdata   ),
-		.mem_la_read (mem_la_read ),
-		.mem_la_write(mem_la_write),
-		.mem_la_addr (mem_la_addr ),
-		.mem_la_wdata(mem_la_wdata),
-		.mem_la_wstrb(mem_la_wstrb)
-	);
+    always @(posedge clk_bufg) begin
+        reset_cnt <= reset_cnt + !resetn;
+    end
 
-	reg [31:0] memory [0:MEM_SIZE-1];
-	initial $readmemh("firmware.hex", memory);
+    wire        iomem_valid;
+    reg         iomem_ready;
+    wire [ 3:0] iomem_wstrb;
+    wire [31:0] iomem_addr;
+    wire [31:0] iomem_wdata;
+    reg  [31:0] iomem_rdata;
 
-	reg [31:0] m_read_data;
-	reg m_read_en;
+    reg  [31:0] gpio;
 
-	generate if (FAST_MEMORY) begin
-		always @(posedge clk) begin
-			mem_ready <= 1;
-			out_byte_en <= 0;
-			mem_rdata <= memory[mem_la_addr >> 2];
-			if (mem_la_write && (mem_la_addr >> 2) < MEM_SIZE) begin
-				if (mem_la_wstrb[0]) memory[mem_la_addr >> 2][ 7: 0] <= mem_la_wdata[ 7: 0];
-				if (mem_la_wstrb[1]) memory[mem_la_addr >> 2][15: 8] <= mem_la_wdata[15: 8];
-				if (mem_la_wstrb[2]) memory[mem_la_addr >> 2][23:16] <= mem_la_wdata[23:16];
-				if (mem_la_wstrb[3]) memory[mem_la_addr >> 2][31:24] <= mem_la_wdata[31:24];
-			end
-			else
-			if (mem_la_write && mem_la_addr == 32'h1000_0000) begin
-				out_byte_en <= 1;
-				out_byte <= mem_la_wdata;
-			end
-		end
-	end else begin
-		always @(posedge clk) begin
-			m_read_en <= 0;
-			mem_ready <= mem_valid && !mem_ready && m_read_en;
+    assign led = gpio[3:0];
 
-			m_read_data <= memory[mem_addr >> 2];
-			mem_rdata <= m_read_data;
+    always @(posedge clk_bufg) begin
+        if (!resetn) begin
+            gpio <= 0;
+            end else begin
+            iomem_ready <= 0;
+            if (iomem_valid && !iomem_ready && iomem_addr[31:24] == 8'h03) begin
+                iomem_ready <= 1;
+                iomem_rdata <= {4{sw, gpio[3:0]}};
+                if (iomem_wstrb[0]) gpio[7:0] <= iomem_wdata[7:0];
+                if (iomem_wstrb[1]) gpio[15:8] <= iomem_wdata[15:8];
+                if (iomem_wstrb[2]) gpio[23:16] <= iomem_wdata[23:16];
+                if (iomem_wstrb[3]) gpio[31:24] <= iomem_wdata[31:24];
+            end
+        end
+    end
 
-			out_byte_en <= 0;
+    picosoc soc (
+        .clk   (clk_bufg),
+        .resetn(resetn),
 
-			(* parallel_case *)
-			case (1)
-				mem_valid && !mem_ready && !mem_wstrb && (mem_addr >> 2) < MEM_SIZE: begin
-					m_read_en <= 1;
-				end
-				mem_valid && !mem_ready && |mem_wstrb && (mem_addr >> 2) < MEM_SIZE: begin
-					if (mem_wstrb[0]) memory[mem_addr >> 2][ 7: 0] <= mem_wdata[ 7: 0];
-					if (mem_wstrb[1]) memory[mem_addr >> 2][15: 8] <= mem_wdata[15: 8];
-					if (mem_wstrb[2]) memory[mem_addr >> 2][23:16] <= mem_wdata[23:16];
-					if (mem_wstrb[3]) memory[mem_addr >> 2][31:24] <= mem_wdata[31:24];
-					mem_ready <= 1;
-				end
-				mem_valid && !mem_ready && |mem_wstrb && mem_addr == 32'h1000_0000: begin
-					out_byte_en <= 1;
-					out_byte <= mem_wdata;
-					mem_ready <= 1;
-				end
-			endcase
-		end
-	end endgenerate
+        .ser_tx(tx),
+        .ser_rx(rx),
+
+        .irq_5(1'b0),
+        .irq_6(1'b0),
+        .irq_7(1'b0),
+
+        .iomem_valid(iomem_valid),
+        .iomem_ready(iomem_ready),
+        .iomem_wstrb(iomem_wstrb),
+        .iomem_addr (iomem_addr),
+        .iomem_wdata(iomem_wdata),
+        .iomem_rdata(iomem_rdata)
+    );
+
+endmodule
+
+module bufg_opt (
+        input dat_in,
+        output reg dat_out
+    );
+        always @* begin
+            dat_out <= dat_in;
+        end
 endmodule
