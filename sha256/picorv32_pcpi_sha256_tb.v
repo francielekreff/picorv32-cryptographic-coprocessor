@@ -6,10 +6,6 @@ module picorv32_pcpi_sha256_tb();
     parameter CLK_HALF_PERIOD = 2;
     parameter CLK_PERIOD = 2 * CLK_HALF_PERIOD;
 
-    /* register and wire declarations */
-    reg [31 : 0] error_ctr;
-    reg [31 : 0] tc_ctr;
-
 	/* uut inputs */
     reg        clk_tb;
     reg        reset_n_tb;
@@ -43,7 +39,7 @@ module picorv32_pcpi_sha256_tb();
     );
 
 
-    /* clock generator process */
+    /* clock generator */
     always begin
         #CLK_HALF_PERIOD;
         clk_tb = !clk_tb;
@@ -51,7 +47,7 @@ module picorv32_pcpi_sha256_tb();
 
 
     /* toggle reset */
-    task reset_uut;
+    task reset;
         begin
         reset_n_tb = 0;
         #(2 * CLK_PERIOD);
@@ -60,52 +56,185 @@ module picorv32_pcpi_sha256_tb();
     endtask
 
 
-    /* initialize all inputs to defined values */
-    task init_sim;
+    /* initialize pcpi inputs to defined values */
+    task reset_pcpi_inputs;
         begin
-        clk_tb = 1;
-        reset_n_tb = 1;
-
         pcpi_valid_tb = 0;
         pcpi_insn_tb = 32'b0000000_00000_00000_000_00000_0000000;
         pcpi_rs1_tb = 0;
         pcpi_rs2_tb = 0;
-    
         end
-    endtask 
+    endtask
 
-    task lw_insn (input [32 : 0]   rs1,
-                  input [511 : 0] rs2);
+
+    /* initialize all inputs to defined values */
+    task init_inputs;
+        begin
+        clk_tb = 1;
+        reset_n_tb = 1;
+        reset_pcpi_inputs();
+        end
+    endtask
+
+
+    /* wait for the pcpi ready flag */
+    task wait_ready;
+        begin
+        while (!pcpi_ready_tb)
+            begin
+            #(CLK_PERIOD);
+            end
+        end
+    endtask
+
+
+    /* 000 crypto.sha256_lw r1, r2 */
+    task sha256_lw (input [32 : 0] rs1,
+                    input [32 : 0] rs2);
     begin
         pcpi_valid_tb = 1;
         pcpi_insn_tb = 32'b0000000_00000_00000_000_00000_0001011;
         pcpi_rs1_tb = rs1;
         pcpi_rs2_tb = rs2;
-        #(10 * CLK_PERIOD);
-        pcpi_valid_tb = 0;
-        pcpi_insn_tb = 32'b0000000_00000_00000_000_00000_0000000;
+        wait_ready();
+        reset_pcpi_inputs();
         end
     endtask
 
-    task init_insn;
+
+    /* 001 crypto.sha256_init */
+    task sha256_init;
         begin
         pcpi_valid_tb = 1;
         pcpi_insn_tb = 32'b0000000_00000_00000_001_00000_0001011;
         pcpi_rs1_tb = 0;
         pcpi_rs2_tb = 0;
-        #(10 * CLK_PERIOD);
-
+        wait_ready();
+        reset_pcpi_inputs();
         end
     endtask
 
-    task next_insn;
+
+    /* 010 crypto.sha256_next */
+    task sha256_next;
         begin
         pcpi_valid_tb = 1;
         pcpi_insn_tb = 32'b0000000_00000_00000_010_00000_0001011;
         pcpi_rs1_tb = 0;
         pcpi_rs2_tb = 0;
+        wait_ready();
+        reset_pcpi_inputs();
+        end
+    endtask
+
+
+    /* 011 crypto.sha256_digest r2, rd */
+    task sha256_digest (input [32 : 0] rs2);
+    begin
+        pcpi_valid_tb = 1;
+        pcpi_insn_tb = 32'b0000000_00000_00000_011_00000_0001011;
+        pcpi_rs1_tb = 0;
+        pcpi_rs2_tb = rs2;
+        wait_ready();
+        reset_pcpi_inputs();
+        end
+    endtask
+
+
+    /* 100 crypto.sha256_reset */
+    task sha256_reset;
+        begin
+        pcpi_valid_tb = 1;
+        pcpi_insn_tb = 32'b0000000_00000_00000_100_00000_0001011;
+        pcpi_rs1_tb = 0;
+        pcpi_rs2_tb = 0;
+        wait_ready();
+        reset_pcpi_inputs();
+        end
+    endtask
+
+
+    /* load SHA-256 block */
+    task load_block (input [511 : 0] block);
+    begin
+        sha256_lw(32'h61626380,0);
+        #(4*CLK_PERIOD);
         
-        #(10 * CLK_PERIOD);
+        sha256_lw(32'h00000000,1);
+        #(4*CLK_PERIOD);
+        
+        sha256_lw(32'h00000000,2);
+        #(4*CLK_PERIOD);
+        
+        sha256_lw(32'h00000000,3);
+        #(4*CLK_PERIOD);
+        
+        sha256_lw(32'h00000000,4);
+        #(4*CLK_PERIOD);
+        
+        sha256_lw(32'h00000000,5);
+        #(4*CLK_PERIOD);
+        
+        sha256_lw(32'h00000000,6);
+        #(4*CLK_PERIOD);
+        
+        sha256_lw(32'h00000000,7);
+        #(4*CLK_PERIOD);
+
+        sha256_lw(32'h00000000,8);
+        #(4*CLK_PERIOD);
+
+        sha256_lw(32'h00000000,9);
+        #(4*CLK_PERIOD);
+
+        sha256_lw(32'h00000000,10);
+        #(4*CLK_PERIOD);
+        
+        sha256_lw(32'h00000000,11);
+        #(4*CLK_PERIOD);
+        
+        sha256_lw(32'h00000000,12);
+        #(4*CLK_PERIOD);
+    
+        sha256_lw(32'h00000000,13);
+        #(4*CLK_PERIOD);
+    
+        sha256_lw(32'h00000000,14);
+        #(4*CLK_PERIOD);
+        
+        sha256_lw(32'h00000018,15);
+        #(4*CLK_PERIOD);
+
+        end
+    endtask
+
+
+    /* SHA-256 digest */
+    task digest;
+    begin
+        sha256_digest(0);
+        #(4*CLK_PERIOD);
+
+        sha256_digest(1);
+        #(4*CLK_PERIOD);
+        
+        sha256_digest(2);
+        #(4*CLK_PERIOD);
+        
+        sha256_digest(3);
+        #(4*CLK_PERIOD);
+        
+        sha256_digest(4);
+        #(4*CLK_PERIOD);
+        
+        sha256_digest(5);
+        #(4*CLK_PERIOD);
+        
+        sha256_digest(6);
+        #(4*CLK_PERIOD);
+        
+        sha256_digest(7);
+        #(4*CLK_PERIOD);
         end
     endtask
 
@@ -113,61 +242,22 @@ module picorv32_pcpi_sha256_tb();
     /* main process */
     initial begin
 
-        init_sim();
-        reset_uut();
+        init_inputs();
+        reset();
 
-        lw_insn(32'h61626380,0);
-        #CLK_PERIOD;
+        sha256_reset();
+        #(4*CLK_PERIOD);
+      
+        load_block(512'h61626380000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000018);
 
-        lw_insn(32'h00000000,1);
-        #CLK_PERIOD;
-        
-        lw_insn(32'h00000000,2);
-        #CLK_PERIOD;
-        
-        lw_insn(32'h00000000,3);
-        #CLK_PERIOD;
-        
-        lw_insn(32'h00000000,4);
-        #CLK_PERIOD;
-        
-        lw_insn(32'h00000000,5);
-        #CLK_PERIOD;
-        
-        lw_insn(32'h00000000,6);
-        #CLK_PERIOD;
-        
-        lw_insn(32'h00000000,7);
-        #CLK_PERIOD;
+        sha256_init();
+        #(4*CLK_PERIOD);
 
-        lw_insn(32'h00000000,8);
-        #CLK_PERIOD;
+        digest();
 
-        lw_insn(32'h00000000,9);
-        #CLK_PERIOD;
-
-        lw_insn(32'h00000000,10);
-        #CLK_PERIOD;
+        sha256_reset();
+        #(4*CLK_PERIOD);
         
-        lw_insn(32'h00000000,11);
-        #CLK_PERIOD;
-        
-        lw_insn(32'h00000000,12);
-        #CLK_PERIOD;
-    
-        lw_insn(32'h00000000,13);
-        #CLK_PERIOD;
-    
-        lw_insn(32'h00000000,14);
-        #CLK_PERIOD;
-        
-        lw_insn(32'h00000018,15);
-        #CLK_PERIOD;
-
-        init_insn();
-        #(100 * CLK_PERIOD);
-        //next_insn();
-
         $finish;
         end
 

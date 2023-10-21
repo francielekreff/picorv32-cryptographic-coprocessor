@@ -24,50 +24,52 @@ module picorv32_pcpi_sha256 (
 
     localparam MODE_SHA_256   = 1;
 
+    integer i;
+
 	/* SHA-256 coprocessor instructions */
     reg instr_sha256_lw, instr_sha256_init, instr_sha256_next, instr_sha256_digest, instr_sha256_reset;
 	wire instr_any_sha256 = |{instr_sha256_lw, instr_sha256_init, instr_sha256_next, instr_sha256_digest, instr_sha256_reset};
 
+    reg instr_sha256_lw_ready, instr_sha256_init_ready, instr_sha256_next_ready, instr_sha256_digest_ready, instr_sha256_reset_ready;
+    wire instr_any_sha256_ready = |{instr_sha256_lw_ready, instr_sha256_init_ready, instr_sha256_next_ready, instr_sha256_digest_ready, instr_sha256_reset_ready};
 
-    reg init;
-    reg init_q;
-    wire core_init = init && !init_q;
+    reg sha256_init;
+    reg sha256_init_q;
+    wire core_init = sha256_init && !sha256_init_q;
 
-    reg next;
-    reg next_q;
-    wire core_next = next && !next_q;
+    reg sha256_next;
+    reg sha256_next_q;
+    wire core_next = sha256_next && !sha256_next_q;
 
-    reg reset;
-    reg reset_q;
-    wire core_reset_n = reset && !reset_q;
+    reg sha256_reset;
+    reg sha256_reset_q;
+    reg core_reset_n;
+
+    reg core_mode = MODE_SHA_256;
 
     wire core_ready;
     wire core_digest_valid;
 
-    reg [31 : 0] block  [0 : BLOCK_MAX_WORD];
-    reg [31 : 0] digest [0 : DIGEST_MAX_WORD];
+    reg [31 : 0] block  [BLOCK_MIN_WORD : BLOCK_MAX_WORD];
+    reg [31 : 0] digest [DIGEST_MIN_WORD : DIGEST_MAX_WORD];
 
     wire [BLOCK_SIZE  -1 : 0] core_block;
     wire [DIGEST_SIZE -1 : 0] core_digest;
-    wire  [DIGEST_SIZE -1 : 0] core_digest_q;
 
     assign core_block = {block[00], block[01], block[02], block[03],
                          block[04], block[05], block[06], block[07],
                          block[08], block[09], block[10], block[11],
                          block[12], block[13], block[14], block[15]};
 
-    assign core_digest_q = {digest[00], digest[01], digest[02], digest[03],
-                          digest[04], digest[05], digest[06], digest[07]};
-
 
     /* core instantiation */
     sha256_core core(
         .clk            (clk),
-        .reset_n        (reset_n),
+        .reset_n        (core_reset_n),
 
         .init           (core_init),
         .next           (core_next),
-        .mode           (MODE_SHA_256),
+        .mode           (core_mode),
         .block          (core_block),
 
         .ready          (core_ready),
@@ -84,7 +86,7 @@ module picorv32_pcpi_sha256 (
 		instr_sha256_digest <= 0;
         instr_sha256_reset <= 0;
 
-		if (reset_n && pcpi_valid && pcpi_insn[6:0] == 7'b0001011 && pcpi_insn[31:25] == 7'b0000000) begin 
+		if (pcpi_valid && pcpi_insn[6:0] == 7'b0001011 && pcpi_insn[31:25] == 7'b0000000 && reset_n) begin 
 			case (pcpi_insn[14:12])
 				3'b000: instr_sha256_lw <= 1;
 				3'b001: instr_sha256_init <= 1;
@@ -92,40 +94,141 @@ module picorv32_pcpi_sha256 (
 				3'b011: instr_sha256_digest <= 1;
                 3'b100: instr_sha256_reset <= 1;
 			endcase
+
+            pcpi_wait <= instr_any_sha256;
 		end
-        pcpi_wait <= instr_any_sha256;
 
-        init <= instr_sha256_init;
-	    init_q <= init;
+        sha256_init <= instr_sha256_init;
+	    sha256_init_q <= sha256_init;
 
-        next <= instr_sha256_next;
-		next_q <= next;
+        sha256_next <= instr_sha256_next;
+		sha256_next_q <= sha256_next;
 
-        reset <= instr_sha256_reset;
-		reset_q <= reset;
+        sha256_reset <= instr_sha256_reset;
+		sha256_reset_q <= sha256_reset;
+
 	end
 
-
-    /* block write */
+    /* buffers and regs reset */
     always @(posedge clk) begin
-        if (instr_sha256_lw)
-        begin
+        if (!reset_n) begin
+            pcpi_wait <= 0;
+            pcpi_rd <= 0;
+
+            sha256_init <= 0;
+            sha256_init_q <= 0;
+
+            sha256_next <= 0;
+		    sha256_next_q <= 0;
+
+            sha256_reset <= 0;
+            sha256_reset_q <= 0;
+
+            for (i = BLOCK_MIN_WORD; i <= BLOCK_MAX_WORD; i=i+1) begin
+                block[i] = 32'h00000000;
+            end 
+
+            for (i = DIGEST_MIN_WORD; i <= DIGEST_MAX_WORD; i=i+1) begin
+                digest[i] = 32'h00000000;
+            end 
+        end
+    end
+
+    /* core init and core next */
+    always @(posedge clk) begin
+        instr_sha256_init_ready <= 0;
+        instr_sha256_next_ready <= 0;
+
+        if (pcpi_valid && instr_sha256_init && reset_n) begin
+            if (core_ready && core_digest_valid) begin
+                digest[0] = core_digest[255:224];
+                digest[1] = core_digest[223:192];
+                digest[2] = core_digest[191:160];
+                digest[3] = core_digest[159:128];
+                digest[4] = core_digest[127: 96];
+                digest[5] = core_digest[ 95: 64];
+                digest[6] = core_digest[ 63: 32];
+                digest[7] = core_digest[ 31: 00];
+
+                pcpi_rd <= 0;
+                instr_sha256_init_ready <= 1;
+            end
+        end
+
+        if (pcpi_valid && instr_sha256_next && reset_n) begin
+            if (core_ready && core_digest_valid) begin
+                digest[0] = core_digest[255:224];
+                digest[1] = core_digest[223:192];
+                digest[2] = core_digest[191:160];
+                digest[3] = core_digest[159:128];
+                digest[4] = core_digest[127: 96];
+                digest[5] = core_digest[ 95: 64];
+                digest[6] = core_digest[ 63: 32];
+                digest[7] = core_digest[ 31: 00];
+
+                pcpi_rd <= 0;
+                instr_sha256_next_ready <= 1;
+            end
+        end
+    end
+
+
+    /* load word and digest */
+    always @(posedge clk) begin
+        instr_sha256_lw_ready <= 0;
+        instr_sha256_digest_ready <= 0;
+
+        if (pcpi_valid && instr_sha256_lw && reset_n) begin
             if ((pcpi_rs2 >= BLOCK_MIN_WORD) && (pcpi_rs2 <= BLOCK_MAX_WORD))
                 block[pcpi_rs2] <= pcpi_rs1;
+            
+            pcpi_rd <= 0;
+            instr_sha256_lw_ready <= 1; 
         end
-    end
 
-    /* digest read */
-    always @(posedge clk) begin
-        if (instr_sha256_digest)
-        begin
+        if (pcpi_valid && instr_sha256_digest && reset_n) begin
             if ((pcpi_rs2 >= DIGEST_MIN_WORD) && (pcpi_rs2 <= DIGEST_MAX_WORD))
                 pcpi_rd <= digest[pcpi_rs2];
+
+            instr_sha256_digest_ready <= 1;
         end
     end
 
+    /* reset */
+    always @(posedge clk) begin
+        instr_sha256_reset_ready <= 0;
+
+        core_reset_n <= reset_n;
+
+        if (pcpi_valid && instr_sha256_reset && reset_n) begin
+            /* reset buffers */
+            for (i = BLOCK_MIN_WORD; i <= BLOCK_MAX_WORD; i=i+1) begin
+                block[i] = 32'h00000000;
+            end 
+
+            for (i = DIGEST_MIN_WORD; i <= DIGEST_MAX_WORD; i=i+1) begin
+                digest[i] = 32'h00000000;
+            end 
+
+            core_reset_n <= 0;
+            instr_sha256_reset_ready <= 1;
+        end
+    end
+
+
+    /* ready */
     always @ (posedge clk) begin
-        pcpi_ready <= core_ready;
+		pcpi_wr <= 0;
+		pcpi_ready <= 0;
+
+		if (pcpi_valid && instr_any_sha256_ready && reset_n) begin
+			pcpi_ready <= 1;
+            pcpi_wait <= 0;
+		end
+
+        if (pcpi_valid && instr_sha256_digest_ready && reset_n) begin
+			pcpi_wr <= 1;
+		end
     end
 
 endmodule
