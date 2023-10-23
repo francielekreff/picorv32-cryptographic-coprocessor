@@ -322,6 +322,22 @@ module picorv32 #(
 		assign pcpi_div_ready = 0;
 	end endgenerate
 
+	/* External PCPI Core */
+	generate if (ENABLE_PCPI) begin
+		picorv32_pcpi_sha256 pcpi_sha256 (
+			.clk       (clk        ),
+			.reset_n   (resetn     ),
+			.pcpi_valid(pcpi_valid ),
+			.pcpi_insn (pcpi_insn  ),
+			.pcpi_rs1  (pcpi_rs1   ),
+			.pcpi_rs2  (pcpi_rs2   ),
+			.pcpi_wr   (pcpi_wr    ),
+			.pcpi_rd   (pcpi_rd    ),
+			.pcpi_wait (pcpi_wait  ),
+			.pcpi_ready(pcpi_ready )
+		);
+	end endgenerate
+
 	always @* begin
 		pcpi_int_wr = 0;
 		pcpi_int_rd = 32'bx;

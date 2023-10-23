@@ -1,5 +1,3 @@
-`default_nettype none
-
 module picorv32_pcpi_sha256 (
     input wire        clk,
     input wire        reset_n,
@@ -22,7 +20,7 @@ module picorv32_pcpi_sha256 (
     localparam DIGEST_MIN_WORD = 0;
     localparam DIGEST_MAX_WORD = 7;
 
-    localparam MODE_SHA_256   = 1;
+    localparam MODE_SHA_256 = 1;
 
     integer i;
 
