@@ -202,6 +202,7 @@ module sha256_core(
   //----------------------------------------------------------------
   always @ (posedge clk or negedge reset_n)
     begin : reg_update
+      digest_valid_reg <= 0;
       if (!reset_n)
         begin
           a_reg            <= 32'h0;
