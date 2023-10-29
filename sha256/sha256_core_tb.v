@@ -6,6 +6,8 @@ module sha256_core_tb();
     parameter CLK_HALF_PERIOD = 2;
     parameter CLK_PERIOD = 2 * CLK_HALF_PERIOD;
 
+    parameter MODE_SHA_256 = 1;
+
     /* register and wire declarations */
     reg [31 : 0] error_ctr;
     reg [31 : 0] tc_ctr;
@@ -41,7 +43,7 @@ module sha256_core_tb();
     );
 
 
-    /* clock generator process */
+    /* clock generator */
     always begin
         #CLK_HALF_PERIOD;
         clk_tb = !clk_tb;
@@ -49,7 +51,7 @@ module sha256_core_tb();
 
 
     /* toggle reset */
-    task reset_uut;
+    task reset;
         begin
         reset_n_tb = 0;
         #(2 * CLK_PERIOD);
@@ -59,7 +61,7 @@ module sha256_core_tb();
 
 
     /* initialize all inputs to defined values */
-    task init_sim;
+    task init_inputs;
         begin
         error_ctr = 0;
         tc_ctr = 0;
@@ -69,7 +71,7 @@ module sha256_core_tb();
 
         init_tb = 0;
         next_tb = 0;
-        mode_tb = 1;
+        mode_tb = MODE_SHA_256;
 
         block_tb = 512'h00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000;
         end
@@ -209,8 +211,8 @@ module sha256_core_tb();
         reg [511 : 0] tc;
         reg [255 : 0] res;
         begin : sha256_test
-        tc = 512'h61626380000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000018;
-        res = 256'hBA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD;
+        tc = 512'h48656c6c6f2c20576f726c6421800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000068;
+        res = 256'hdffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f;
         single_block_test(3, tc, res);
         end
     endtask
@@ -218,8 +220,8 @@ module sha256_core_tb();
 
     /* main process */
     initial begin
-        init_sim();
-        reset_uut();
+        init_inputs();
+        reset();
 
         sha256_test();
         sha256_hello_world_test();
