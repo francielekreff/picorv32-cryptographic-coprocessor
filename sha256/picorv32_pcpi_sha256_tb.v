@@ -6,6 +6,9 @@ module picorv32_pcpi_sha256_tb();
     parameter CLK_HALF_PERIOD = 2;
     parameter CLK_PERIOD = 2 * CLK_HALF_PERIOD;
 
+    /* register and wire declarations */
+    reg [31 : 0] tc_ctr;
+
 	/* uut inputs */
     reg        clk_tb;
     reg        reset_n_tb;
@@ -91,7 +94,7 @@ module picorv32_pcpi_sha256_tb();
     /* 000 crypto.sha256_lw r1, r2 */
     task sha256_lw (input [32 : 0] rs1,
                     input [32 : 0] rs2);
-    begin
+        begin
         pcpi_valid_tb = 1;
         pcpi_insn_tb = 32'b0000000_00000_00000_000_00000_0001011;
         pcpi_rs1_tb = rs1;
@@ -130,7 +133,7 @@ module picorv32_pcpi_sha256_tb();
 
     /* 011 crypto.sha256_digest r2, rd */
     task sha256_digest (input [32 : 0] rs2);
-    begin
+        begin
         pcpi_valid_tb = 1;
         pcpi_insn_tb = 32'b0000000_00000_00000_011_00000_0001011;
         pcpi_rs1_tb = 0;
@@ -156,54 +159,54 @@ module picorv32_pcpi_sha256_tb();
 
     /* load SHA-256 block */
     task load_block (input [511 : 0] block);
-    begin
-        sha256_lw(32'h61626380,0);
-        #(4*CLK_PERIOD);
+        begin
+        sha256_lw(block[511:480],0);
+        #(CLK_PERIOD);
         
-        sha256_lw(32'h00000000,1);
-        #(4*CLK_PERIOD);
+        sha256_lw(block[479:448],1);
+        #(CLK_PERIOD);
         
-        sha256_lw(32'h00000000,2);
-        #(4*CLK_PERIOD);
+        sha256_lw(block[447:416],2);
+        #(CLK_PERIOD);
         
-        sha256_lw(32'h00000000,3);
-        #(4*CLK_PERIOD);
+        sha256_lw(block[415:384],3);
+        #(CLK_PERIOD);
         
-        sha256_lw(32'h00000000,4);
-        #(4*CLK_PERIOD);
+        sha256_lw(block[383:352],4);
+        #(CLK_PERIOD);
         
-        sha256_lw(32'h00000000,5);
-        #(4*CLK_PERIOD);
+        sha256_lw(block[351:320],5);
+        #(CLK_PERIOD);
         
-        sha256_lw(32'h00000000,6);
-        #(4*CLK_PERIOD);
+        sha256_lw(block[319:288],6);
+        #(CLK_PERIOD);
         
-        sha256_lw(32'h00000000,7);
-        #(4*CLK_PERIOD);
+        sha256_lw(block[287:256],7);
+        #(CLK_PERIOD);
 
-        sha256_lw(32'h00000000,8);
-        #(4*CLK_PERIOD);
+        sha256_lw(block[255:224],8);
+        #(CLK_PERIOD);
 
-        sha256_lw(32'h00000000,9);
-        #(4*CLK_PERIOD);
+        sha256_lw(block[223:192],9);
+        #(CLK_PERIOD);
 
-        sha256_lw(32'h00000000,10);
-        #(4*CLK_PERIOD);
+        sha256_lw(block[191:160],10);
+        #(CLK_PERIOD);
         
-        sha256_lw(32'h00000000,11);
-        #(4*CLK_PERIOD);
+        sha256_lw(block[159:128],11);
+        #(CLK_PERIOD);
         
-        sha256_lw(32'h00000000,12);
-        #(4*CLK_PERIOD);
+        sha256_lw(block[127:96],12);
+        #(CLK_PERIOD);
     
-        sha256_lw(32'h00000000,13);
-        #(4*CLK_PERIOD);
+        sha256_lw(block[95:64],13);
+        #(CLK_PERIOD);
     
-        sha256_lw(32'h00000000,14);
-        #(4*CLK_PERIOD);
+        sha256_lw(block[63:32],14);
+        #(CLK_PERIOD);
         
-        sha256_lw(32'h00000018,15);
-        #(4*CLK_PERIOD);
+        sha256_lw(block[31:0],15);
+        #(CLK_PERIOD);
 
         end
     endtask
@@ -211,30 +214,123 @@ module picorv32_pcpi_sha256_tb();
 
     /* SHA-256 digest */
     task digest;
-    begin
+        begin
         sha256_digest(0);
-        #(4*CLK_PERIOD);
+        #(CLK_PERIOD);
 
         sha256_digest(1);
-        #(4*CLK_PERIOD);
+        #(CLK_PERIOD);
         
         sha256_digest(2);
-        #(4*CLK_PERIOD);
+        #(CLK_PERIOD);
         
         sha256_digest(3);
-        #(4*CLK_PERIOD);
+        #(CLK_PERIOD);
         
         sha256_digest(4);
-        #(4*CLK_PERIOD);
+        #(CLK_PERIOD);
         
         sha256_digest(5);
-        #(4*CLK_PERIOD);
+        #(CLK_PERIOD);
         
         sha256_digest(6);
-        #(4*CLK_PERIOD);
+        #(CLK_PERIOD);
         
         sha256_digest(7);
-        #(4*CLK_PERIOD);
+        #(CLK_PERIOD);
+        end
+    endtask
+
+
+    /* single data block test case */
+    task single_block_test(input [7 : 0]   tc_number,
+                           input [511 : 0] block,
+                           input [255 : 0] expected);
+        begin
+        tc_ctr = tc_ctr + 1;
+
+        load_block(block);
+
+        sha256_init();
+        #(CLK_PERIOD);
+
+        digest();
+        end
+    endtask
+
+
+    /* double data block test case */
+    task double_block_test(input [7 : 0]   tc_number,
+                           input [511 : 0] block1,
+                           input [255 : 0] expected1,
+                           input [511 : 0] block2,
+                           input [255 : 0] expected2);
+        begin
+        tc_ctr = tc_ctr + 1;
+
+        load_block(block1);
+
+        sha256_init();
+        #(CLK_PERIOD);
+
+        digest();
+
+        load_block(block2);
+
+        sha256_next();
+        #(CLK_PERIOD);
+
+        digest();
+        end
+    endtask
+
+
+    /* Test cases taken from:
+       http://csrc.nist.gov/groups/ST/toolkit/documents/Examples/SHA256.pdf */
+    task sha256_test;
+        reg [511 : 0] tc1;
+        reg [255 : 0] res1;
+        reg [511 : 0] tc2_1;
+        reg [255 : 0] res2_1;
+        reg [511 : 0] tc2_2;
+        reg [255 : 0] res2_2;
+        begin : sha256_test
+        // TC1: single block message: "abc".
+        tc1 = 512'h61626380000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000018;
+        res1 = 256'hBA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD;
+
+        sha256_reset();
+        #(CLK_PERIOD);
+
+        single_block_test(1, tc1, res1);
+
+        // TC2: double block message: "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
+        tc2_1 = 512'h6162636462636465636465666465666765666768666768696768696A68696A6B696A6B6C6A6B6C6D6B6C6D6E6C6D6E6F6D6E6F706E6F70718000000000000000;
+        res2_1 = 256'h85E655D6417A17953363376A624CDE5C76E09589CAC5F811CC4B32C1F20E533A;
+
+        tc2_2 = 512'h000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001C0;
+        res2_2 = 256'h248D6A61D20638B8E5C026930C3E6039A33CE45964FF2167F6ECEDD419DB06C1;
+
+        sha256_reset();
+        #(CLK_PERIOD);
+
+        double_block_test(2, tc2_1, res2_1, tc2_2, res2_2);
+        end
+    endtask
+    
+
+    /* Test case for the message "Hello, World!"*/
+    task sha256_hello_world_test;
+        reg [511 : 0] tc;
+        reg [255 : 0] res;
+        begin : sha256_test
+        tc = 512'h48656c6c6f2c20576f726c6421800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000068;
+        res = 256'hdffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f;
+
+        sha256_reset();
+        #(CLK_PERIOD);
+
+        single_block_test(3, tc, res);
         end
     endtask
 
@@ -245,20 +341,10 @@ module picorv32_pcpi_sha256_tb();
         init_inputs();
         reset();
 
-        sha256_reset();
-        #(4*CLK_PERIOD);
-      
-        load_block(512'h61626380000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000018);
-
-        sha256_init();
-        #(4*CLK_PERIOD);
-
-        digest();
-
-        sha256_reset();
-        #(4*CLK_PERIOD);
-        
+        sha256_test();
+        sha256_hello_world_test();
+                      
         $finish;
-        end
+    end
 
 endmodule
