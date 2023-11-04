@@ -22,7 +22,7 @@ main.lds: sections.lds
 
 main.elf: main.lds start.s main.c
 	$(CROSS)gcc $(CFLAGS) -march=rv32im -mabi=ilp32 -Wl,--build-id=none,-Bstatic,-T,main.lds,-Map,main.map,--strip-debug -fno-builtin-memset -nostdlib -ffreestanding \
-	-o main.elf start.s main.c
+	-o main.elf start.s main.c sha256.c
 
 
 main.hex: main.elf
